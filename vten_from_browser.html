@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<script>
+
+//var firstFolder='share/_music';
+var FolderList=[];
+var supportedFormats=[];
+var playList=[];
+var localPlayListSize;
+var vtenPlayListSize;
+var flag_empty_play_list;
+var index_into_set_playlist;
+var try_counter;
+var stop_getCurrentlyPlaying;
+var current_file;
+var mainPath='/opt/sybhttpd/localhost.drives/share/_music';
+var NMT_ip="http://10.0.0.37:8008/";
+
+function setPath(pashStr) 
+{
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() 
+  {
+    if (xhttp.readyState == 4 && xhttp.status == 200) 
+	{
+      //document.getElementById("demo").innerHTML = xhttp.responseText;
+	//	document.getElementById("demo").innerText = xhttp.responseText;
+	  
+		if (window.DOMParser)
+		{
+			parser = new DOMParser();
+			xmlDoc = parser.parseFromString(xhttp.responseText, "text/xml");
+		}
+		else // Internet Explorer
+		{
+			xmlDoc = new ActiveXObject("Microsoft.XMLDOM");
+			xmlDoc.async = false;
+			xmlDoc.loadXML(xhttp.responseText);
+		}
+
+		setFileList(xmlDoc);
+		FolderList.push(pashStr);		
+		document.getElementById("currentFolder").innerHTML = "<h2>"+pashStr+"</h2>"
+    }
+  };
+  
+  requestStr=NMT_ip+"file_operation?arg0=list_user_storage_file&arg1="+pashStr+"&arg2=0&arg3=1000&arg4=true&arg5=true&arg6=true&arg7=&arg8=name_asc&arg9=false"
+  xhttp.open("GET", requestStr , true);
+  xhttp.send();
+}
+
+function setFileList(xmlDoc) 
+{
+	playList=[];
+	Z=xmlDoc.getElementsByTagName("isFolder");
+	path=xmlDoc.getElementsByTagName("path");
+	text="<ul>";
+	for (i = 0; i < Z.length; i++)
+	{ 
+		str= path[i].childNodes[0].nodeValue;
+		str_short=str.replace(mainPath, "");
+		if (Z[i].childNodes[0].nodeValue=="yes")
+		{
+			text += "<li style='cursor:pointer;font-weight: bold;' onclick='setPath(" +'"' + str +'"'+");' >";
+			text += str_short +"</li>";
+		}	
+	}
+	counter=-1;
+	for (i = 0; i < Z.length; i++)
+	{
+		str= path[i].childNodes[0].nodeValue;
+		str_short=str.replace(mainPath, "");
+		if (Z[i].childNodes[0].nodeValue=="no")
+		{
+			
+			text += "<li ";		
+			flag=0;
+			for (j=0;j<supportedFormats.length;j++)
+			{
+				str2="."+supportedFormats[j];
+				loc=str.indexOf(str2);
+				if (loc>0)
+				{
+					flag=1;
+				}
+			}
+			if (flag==0)
+			{
+				text+=">";
+			}
+			else
+			{
+				counter++;
+				text+=" id='playList_"+counter+"' style='color:blue; cursor:pointer;' onclick='startFrom=" + counter + ";setPlayList_part1();'>";
+				playList.push(str);
+			}
+			text += str_short +"</li>";	
+		}
+		
+	}
+	text+="</ul>";
+	document.getElementById("fileList").innerHTML = text;
+
+}
+
+function setPlayList_part1() 
+{
+	
+	document.getElementById("pause").disabled = true;
+	document.getElementById("resume").disabled = true;
+	document.getElementById("playAll").disabled = true;
+	document.getElementById("stop").disabled = true;
+	
+	flag_empty_play_list=0;
+	stop_getCurrentlyPlaying=0;
+	deletePlayList();	
+
+	index_into_set_playlist=startFrom;
+	setTimeout(setPlayList_part2, 50);
+
+}
+function setPlayList_part2() 
+{
+	if (flag_empty_play_list==0)//wait for play list to be empty
+	{
+		setTimeout(setPlayList_part2, 100);
+		return;
+	}
+	stop_getCurrentlyPlaying=0;
+	
+	var xhttp = new XMLHttpRequest();	
+	xhttp.onreadystatechange = function() 
+	{
+		if (xhttp.readyState == 4 && xhttp.status == 200) 
+		{
+			//document.getElementById("playList").innerText = xhttp.responseText;
+			if (window.DOMParser)
+			{
+				parser = new DOMParser();
+				xmlDoc = parser.parseFromString(xhttp.responseText, "text/xml");
+			}
+			else // Internet Explorer
+			{
+				xmlDoc = new ActiveXObject("Microsoft.XMLDOM");
+				xmlDoc.async = false;
+				xmlDoc.loadXML(xhttp.responseText);
+			}
+			return_value=xmlDoc.getElementsByTagName("returnValue")[0].childNodes[0].nodeValue;
+			if (return_value=="0")
+			{
+				index_into_set_playlist++;				 
+				setPlayList_part2();							
+			}
+			else
+			{
+				// do something here
+			}
+		}
+	};	
+ 
+	if (index_into_set_playlist<playList.length)
+	{	requestStr=NMT_ip+"playback?arg0=insert_aod_queue&arg1=" + index_into_set_playlist + "&arg2=file:///"+playList[index_into_set_playlist];
+		xhttp.open("GET", requestStr , true);
+		xhttp.send();
+	}
+	else
+	{		
+		document.getElementById("pause").disabled = false;
+		document.getElementById("playAll").disabled = true;
+		document.getElementById("stop").disabled = false;
+		document.getElementById("resume").disabled = true;
+		getCurrentlyPlaying() ;
+	}
+	
+}
+
+
+function deletePlayList() 
+{
+	var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() 
+	{
+		if (xhttp.readyState == 4 && xhttp.status == 200) 
+		{
+			//document.getElementById("playList").innerText = xhttp.responseText;
+			if (window.DOMParser)
+			{
+				parser = new DOMParser();
+				xmlDoc = parser.parseFromString(xhttp.responseText, "text/xml");
+			}
+			else // Internet Explorer
+			{
+				xmlDoc = new ActiveXObject("Microsoft.XMLDOM");
+				xmlDoc.async = false;
+				xmlDoc.loadXML(xhttp.responseText);
+			}
+			flag_empty_play_list=1;
+			stop_getCurrentlyPlaying=1;
+			document.getElementById("pause").disabled = true;
+			document.getElementById("resume").disabled = true;
+			document.getElementById("stop").disabled = true;
+			document.getElementById("playAll").disabled = false;
+			
+		}
+	};
+  xhttp.open("GET", NMT_ip+"playback?arg0=stop_aod", true);
+  xhttp.send();
+}
+
+
+function getPlayListSize() 
+{
+	vtenPlayListSize=-1;
+	var xhttp = new XMLHttpRequest();
+	xhttp.onreadystatechange = function() 
+	{
+		if (xhttp.readyState == 4 && xhttp.status == 200) 
+		{
+			//document.getElementById("playList").innerText = xhttp.responseText;
+			if (window.DOMParser)
+			{
+				parser = new DOMParser();
+				xmlDoc = parser.parseFromString(xhttp.responseText, "text/xml");
+			}
+			else // Internet Explorer
+			{
+				xmlDoc = new ActiveXObject("Microsoft.XMLDOM");
+				xmlDoc.async = false;
+				xmlDoc.loadXML(xhttp.responseText);
+			}
+			return_value=xmlDoc.getElementsByTagName("returnValue")[0].childNodes[0].nodeValue;
+			if (return_value=="0")
+			{
+				path=xmlDoc.getElementsByTagName("fullpath");
+				vtenPlayListSize=path.length;
+				try_counter=0;
+			}
+			else
+			{
+				try_counter++;
+				if (try_counter>10)
+				{
+					vtenPlayListSize=0;
+					try_counter=0;
+				}
+				else
+				{
+					setTimeout(getPlayListSize, 50);
+				}
+			}
+		}
+	};
+	xhttp.open("GET", NMT_ip+"playback?arg0=list_aod_queue_info", true);
+	xhttp.send();
+}
+
+function getPlayList() 
+{
+	pause();
+	var xhttp = new XMLHttpRequest();
+	xhttp.onreadystatechange = function() 
+	{
+		if (xhttp.readyState == 4 && xhttp.status == 200) 
+		{
+			//document.getElementById("playList").innerText = xhttp.responseText;
+			if (window.DOMParser)
+			{
+				parser = new DOMParser();
+				xmlDoc = parser.parseFromString(xhttp.responseText, "text/xml");
+			}
+			else // Internet Explorer
+			{
+				xmlDoc = new ActiveXObject("Microsoft.XMLDOM");
+				xmlDoc.async = false;
+				xmlDoc.loadXML(xhttp.responseText);
+			}
+			setList2(xmlDoc);
+		}
+	};
+	xhttp.open("GET", NMT_ip+"playback?arg0=list_aod_queue_info", true);
+	xhttp.send();
+}
+
+function setList2(xmlDoc) 
+{
+	localPlayListSize=0;
+	path=xmlDoc.getElementsByTagName("fullpath");
+	text="<h2>current playlist</h2><ul>";
+	for (i = 0; i < path.length; i++)
+	{ 
+		text += "<li> "+path[i].childNodes[0].nodeValue +"</li>";
+		localPlayListSize++;
+	}
+	text+="</ul>";
+	document.getElementById("playList").innerHTML = text;
+}
+
+
+function back() 
+{
+	numFolders=FolderList.length;
+	if (numFolders==1)
+	{
+		pathStr=FolderList[0];
+		FolderList.pop(); 
+		setPath(pathStr);
+	}
+	else
+	{		
+		pathStr=FolderList[numFolders-2];
+		FolderList.pop(); 
+		FolderList.pop(); 
+		setPath(pathStr);
+	}
+}
+
+function getSupportedFormats() 
+{
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() 
+  {
+    if (xhttp.readyState == 4 && xhttp.status == 200) 
+	{
+      //document.getElementById("demo").innerHTML = xhttp.responseText;
+	//	document.getElementById("demo").innerText = xhttp.responseText;
+	  
+		if (window.DOMParser)
+		{
+			parser = new DOMParser();
+			xmlDoc = parser.parseFromString(xhttp.responseText, "text/xml");
+		}
+		else // Internet Explorer
+		{
+			xmlDoc = new ActiveXObject("Microsoft.XMLDOM");
+			xmlDoc.async = false;
+			xmlDoc.loadXML(xhttp.responseText);
+		}
+		supportedFormats_Temp=xmlDoc.getElementsByTagName("format");
+		for (i=0;i<supportedFormats_Temp.length;i++)
+		{
+			type=supportedFormats_Temp[i].childNodes[0].nodeValue;
+			if (type!='cue' && type !='m3u')
+			{
+				supportedFormats.push(type);
+			}
+		}
+	}
+  }
+  xhttp.open("GET", NMT_ip+"playback?arg0=list_aod_supported_format", true);
+  xhttp.send();
+}
+
+function getCurrentlyPlaying() 
+{
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() 
+  {
+    if (xhttp.readyState == 4 && xhttp.status == 200) 
+	{
+      //document.getElementById("demo").innerHTML = xhttp.responseText;
+	//	document.getElementById("demo").innerText = xhttp.responseText;
+	  
+		if (window.DOMParser)
+		{
+			parser = new DOMParser();
+			xmlDoc = parser.parseFromString(xhttp.responseText, "text/xml");
+		}
+		else // Internet Explorer
+		{
+			xmlDoc = new ActiveXObject("Microsoft.XMLDOM");
+			xmlDoc.async = false;
+			xmlDoc.loadXML(xhttp.responseText);
+		}
+		return_value=xmlDoc.getElementsByTagName("returnValue")[0].childNodes[0].nodeValue;
+		if (return_value=="0")
+		{
+			album=xmlDoc.getElementsByTagName("album")[0].childNodes[0];			
+			if (album!=undefined)
+				albumStr=album.nodeValue;			
+			else
+				albumStr="";
+			
+			title=xmlDoc.getElementsByTagName("title")[0].childNodes[0];
+			if (title!=undefined)			
+				titleStr=title.nodeValue;			
+			else
+				titleStr="";
+				
+			totalTime=xmlDoc.getElementsByTagName("totalTime")[0].childNodes[0].nodeValue;			
+			fullPath=xmlDoc.getElementsByTagName("fullPath")[0].childNodes[0].nodeValue;	
+			currentTime=xmlDoc.getElementsByTagName("currentTime")[0].childNodes[0].nodeValue;	
+			
+	/*
+			artist=xmlDoc.getElementsByTagName("artist")[0].childNodes[0];
+			if (artist!=undefined)			
+				artistStr=artist.nodeValue;			
+			else
+				artistStr="";
+	*/		
+			text='<br>['+albumStr+' - '+titleStr+']';
+			text+='<br><br>';
+			text+=fullPath;
+			text+='<br><br>';
+			//text+='<'+currentTime+'/'+totalTime+'>';
+			
+			second=currentTime%60;
+			minute=(currentTime-second)/60;
+			
+			second2=totalTime%60;
+			minute2=(totalTime-second2)/60;
+		
+			
+			text+='<'+':'+minute+':'+pad(second, 2)+'/'+minute2+':'+pad(second2, 2)+'>';
+			current_file=fullPath;
+			
+				
+		}
+		else
+		{
+			text='not playing';
+			current_file='!@#none';
+					
+		}
+		
+		for (i=0;i<playList.length;i++)
+			{	
+				str="playList_"+i;
+				z=document.getElementById(str);
+				str2=z.innerText;
+				
+				if (current_file.indexOf(str2)>=0)
+				{
+					z.style.color = "red";
+				}
+				else
+				{
+					z.style.color = "blue";;
+				}
+				
+			}
+		
+		if (stop_getCurrentlyPlaying==0)
+		{
+			setTimeout(getCurrentlyPlaying, 1000);
+		}
+		document.getElementById('currentlyPlayingInfo').innerHTML=text;
+	}
+  }
+  xhttp.open("GET", NMT_ip+"playback?arg0=get_current_aod_info", true);
+  xhttp.send();
+}
+
+function pad(num, size) {
+    var s = "000000000" + num;
+    return s.substr(s.length-size);
+}
+
+function resume() 
+{
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() 
+	{
+		if (xhttp.readyState == 4 && xhttp.status == 200) 
+		{
+			//document.getElementById("playList").innerText = xhttp.responseText;
+			if (window.DOMParser)
+			{
+				parser = new DOMParser();
+				xmlDoc = parser.parseFromString(xhttp.responseText, "text/xml");
+			}
+			else // Internet Explorer
+			{
+				xmlDoc = new ActiveXObject("Microsoft.XMLDOM");
+				xmlDoc.async = false;
+				xmlDoc.loadXML(xhttp.responseText);
+			}
+			return_value=xmlDoc.getElementsByTagName("returnValue")[0].childNodes[0].nodeValue;
+			if (return_value=="0")
+			{
+				// do nothing
+				document.getElementById("pause").disabled = false;
+				document.getElementById("resume").disabled = true;
+				getCurrentlyPlaying() ;
+			}
+			else
+			{
+				
+				setTimeout(resume, 50);
+
+			}
+		}
+	};
+  
+  
+  xhttp.open("GET", NMT_ip+"playback?arg0=resume_aod", true);
+  xhttp.send();
+   
+  
+}
+
+function pause() 
+{
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() 
+	{
+		if (xhttp.readyState == 4 && xhttp.status == 200) 
+		{
+			//document.getElementById("playList").innerText = xhttp.responseText;
+			if (window.DOMParser)
+			{
+				parser = new DOMParser();
+				xmlDoc = parser.parseFromString(xhttp.responseText, "text/xml");
+			}
+			else // Internet Explorer
+			{
+				xmlDoc = new ActiveXObject("Microsoft.XMLDOM");
+				xmlDoc.async = false;
+				xmlDoc.loadXML(xhttp.responseText);
+			}
+			return_value=xmlDoc.getElementsByTagName("returnValue")[0].childNodes[0].nodeValue;
+			if (return_value=="0")
+			{
+				// do nothing
+				document.getElementById("pause").disabled = true;
+				document.getElementById("resume").disabled = false;
+				getCurrentlyPlaying() ;
+			}
+			else
+			{
+				
+				setTimeout(pause, 50);
+
+			}
+		}
+	};
+  xhttp.open("GET", NMT_ip+"playback?arg0=pause_aod", true);
+  xhttp.send();
+}
+function stop() 
+{
+	
+	stop_getCurrentlyPlaying=1;
+	deletePlayList();
+	
+}
+
+function next() 
+{
+  var xhttp = new XMLHttpRequest();
+  xhttp.open("GET", NMT_ip+"playback?arg0=next_aod_in_queue", true);
+  xhttp.send();
+}
+function volUp() 
+{
+  var xhttp = new XMLHttpRequest();
+  xhttp.open("GET", NMT_ip+"system?arg0=send_key&arg1=volumeup", true);
+  xhttp.send();
+}
+function volDown() 
+{
+  var xhttp = new XMLHttpRequest();
+  xhttp.open("GET", NMT_ip+"system?arg0=send_key&arg1=volumedown", true);
+  xhttp.send();
+}
+
+function playAll() 
+{
+	startFrom=0;
+	setPlayList_part1();
+	
+}
+function getVolume() 
+{
+
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() 
+  {
+    if (xhttp.readyState == 4 && xhttp.status == 200) 
+	{
+      document.getElementById("volume").innerText = xhttp.responseText;
+    }
+  };
+  xhttp.open("GET", NMT_ip+"system?arg0=get_system_volume", true);
+  xhttp.send();
+}
+
+
+function onLoadFunc()
+{
+	getSupportedFormats();
+	setPath(mainPath);
+}
+
+</script>
+</head>
+<body onload='onLoadFunc();'>
+
+<div id="currentFolder"><h2>current folder</h2></div>
+<button type="button" onclick="back()" id="back">back</button>
+<div id="fileList"><h2>List</h2></div>
+
+<button type="button" onclick="playAll()" id="playAll">play all</button>
+<button type="button" onclick="stop()" id="stop">stop</button>
+<button type="button" onclick="pause()" id="pause">pause</button>
+<button type="button" onclick="resume()" id="resume">resume</button>
+<button type="button" onclick="next()" id="next">next</button>
+
+
+<br>
+<div id="volume"><h2>volume</h2></div>
+<button type="button" onclick="volDown()" id="volDown">-</button>
+<button type="button" onclick="volUp()" id="volUp">+</button>
+<br>
+<div id="currentlyPlayingTitle"><h2>currently playing:</h2></div>
+<div id="currentlyPlayingInfo"><h2></h2></div>
+
+</body>
+</html>
